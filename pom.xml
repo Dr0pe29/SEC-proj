@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>com.example</groupId>
+  <groupId>tecnico.pt</groupId>
   <artifactId>sec-proj</artifactId>
   <version>1.0-SNAPSHOT</version>
   <name>sec-proj</name>
@@ -38,6 +38,14 @@
         <version>3.2.5</version>
         <configuration>
           <useModulePath>false</useModulePath>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.3.0</version>
+        <configuration>
+          <mainClass>tecnico.pt.App</mainClass>
         </configuration>
       </plugin>
     </plugins>
