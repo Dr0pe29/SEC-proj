@@ -1,7 +1,7 @@
 package tecnico.pt.Client;
 import java.io.IOException;
-import java.lang.reflect.Member;
 import java.net.SocketException;
+import java.net.UnknownHostException;
 import java.util.Scanner;
 
 import tecnico.pt.NetworkAddress;
@@ -25,11 +25,12 @@ public class CLI {
         return this.memberId;
     }
 
-    public void memberSetup() throws SocketException {
+    public void memberSetup() throws SocketException, UnknownHostException {
         // Initialize the UDP client and server for this member
-        System.out.println("Initializing member " + getMemberId() + " with address " + MembersList.MEMBERS.get(getMemberId()).getServerAddress() + ":" + MembersList.MEMBERS.get(getMemberId()).getServerPort());
+        NetworkAddress memberAddress = MembersList.MEMBERS.get(getMemberId());
+        System.out.println("Initializing member " + getMemberId() + " with address " + memberAddress.getServerAddress() + ":" + memberAddress.getServerPort());
         this.client = new UDPClient();
-        this.server = new UDPServer(MembersList.MEMBERS.get(memberId).getServerPort(), (data, source) -> {
+        this.server = new UDPServer(memberAddress.getServerAddress(), memberAddress.getServerPort(), (data, source) -> {
             //temporary packet listener implementation for testing
             System.out.println("Received packet from " + source.getServerAddress() + ":" + source.getServerPort());
             System.out.println("Data: " + new String(data));

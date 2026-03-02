@@ -46,6 +46,9 @@
         <version>3.3.0</version>
         <configuration>
           <mainClass>tecnico.pt.App</mainClass>
+          <arguments>
+            <argument>${args}</argument>
+          </arguments>
         </configuration>
       </plugin>
     </plugins>

@@ -2,15 +2,18 @@ package tecnico.pt;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.SocketException;
+import java.net.UnknownHostException;
 
 public class UDPServer extends Thread {
     private final DatagramSocket socket;
     private final PacketListener listener;
     private boolean running;
 
-    public UDPServer(int port, PacketListener listener) throws SocketException {
-        this.socket = new DatagramSocket(port);
+    public UDPServer(String ipAddress, int port, PacketListener listener) throws SocketException, UnknownHostException {
+        this.socket = new DatagramSocket(new InetSocketAddress(InetAddress.getByName(ipAddress), port));
         this.listener = listener;
         this.running = true;
     }

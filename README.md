@@ -8,4 +8,4 @@ Run `mvn test` to compile and execute tests.
 
 ## Run
 
-Run `mvn -q exec:java -Dexec.mainClass=tecnico.pt.App` after adding the exec plugin if desired.
+Run `mvn -Dargs='[memberId]' exec:java` after adding the exec plugin if desired.
