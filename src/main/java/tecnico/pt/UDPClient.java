@@ -12,7 +12,9 @@ public class UDPClient {
         this.socket = new DatagramSocket();
     }
 
-    public void send(byte[] data, NetworkAddress destination) throws IOException {
+    public void send(Message message) throws IOException {
+        NetworkAddress destination = message.getDestination();
+        byte[] data = message.getData();
         InetAddress address = InetAddress.getByName(destination.getServerAddress());
         DatagramPacket packet = new DatagramPacket(
             data, 

@@ -8,17 +8,18 @@ import tecnico.pt.NetworkAddress;
 import tecnico.pt.UDPClient;
 import tecnico.pt.UDPServer;
 import tecnico.pt.MembersList;
+import tecnico.pt.Message;
+import tecnico.pt.StubbornLink;
 
 public class CLI {
     private static final MembersList membersList = new MembersList();
     private final String memberId;
-    private UDPClient client;
+    private StubbornLink stubbornLink;
     private UDPServer server;
+    private UDPClient udpClient;
 
     public CLI(String memberId) {
         this.memberId = memberId;
-        this.client = null;
-        this.server = null;
     }
     
     public String getMemberId() {
@@ -29,16 +30,17 @@ public class CLI {
         // Initialize the UDP client and server for this member
         NetworkAddress memberAddress = MembersList.MEMBERS.get(getMemberId());
         System.out.println("Initializing member " + getMemberId() + " with address " + memberAddress.getServerAddress() + ":" + memberAddress.getServerPort());
-        this.client = new UDPClient();
-        this.server = new UDPServer(memberAddress.getServerAddress(), memberAddress.getServerPort(), (data, source) -> {
-            //temporary packet listener implementation for testing
-            System.out.println("Received packet from " + source.getServerAddress() + ":" + source.getServerPort());
-            System.out.println("Data: " + new String(data));
-        });
+        //CLIENT
+        this.udpClient = new UDPClient();
+        this.stubbornLink = new StubbornLink(this.udpClient);
+
+        //SERVER
+        this.server = new UDPServer(memberAddress.getServerAddress(), memberAddress.getServerPort(), this.stubbornLink);
         this.server.start(); // Start the server thread
     }
 
     public void readInput() throws IOException {
+        this.memberSetup();
         System.out.println("Please enter a string to append to the blockchain:");
         Scanner scanner = new Scanner(System.in);
         while (true) { 
@@ -47,13 +49,14 @@ public class CLI {
                 case "exit" -> {
                     System.out.println("Exiting...");
                     this.server.stopServer(); // Stop the server thread
+                    this.stubbornLink.shutdown(); // Stop the stubborn link scheduler
                     scanner.close();
                     return;
                 }
                 default -> {
                     System.out.println("You entered: " + input);
-                    // Here you would add the logic to send the input to the server
-                    client.send(input.getBytes(), new NetworkAddress("localhost", 12346)); // Example address and port
+                    Message msg = new Message(new NetworkAddress("localhost", 12346), input.getBytes());
+                    this.stubbornLink.stubbornSend(msg); // Example address and port
                 }
             }
         }

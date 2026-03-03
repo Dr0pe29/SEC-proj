@@ -1,3 +1,7 @@
+package tecnico.pt.consensus.hotstuff.model;
+
+import java.util.Set;
+
 public final class Genesis {
 
     public static final String GENESIS_ID = "GENESIS";
