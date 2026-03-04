@@ -41,6 +41,8 @@ public final class HotStuffState {
         this.lockedQC = genesis.getJustify();
 
         this.currentView = 1; // start proposing from view 1
+
+        lastDecidedBlockId = "GENESIS";
     }
 
     // --- View management ---
@@ -82,8 +84,8 @@ public final class HotStuffState {
         blockStore.put(b);
     }
 
-    public Block requireBlock(String id) {
-        return blockStore.get(id).orElseThrow(() -> new IllegalStateException("Unknown block: " + id));
+    public Block getBlockOrNull(String id) {
+        return blockStore.get(id).orElse(null);
     }
 
     // --- Votes / QC building ---

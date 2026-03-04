@@ -2,7 +2,6 @@ package tecnico.pt.consensus.hotstuff;
 
 import java.util.Collections;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Static configuration for a HotStuff replica.
@@ -12,8 +11,7 @@ import java.util.Objects;
 public final class HotStuffConfig {
 
     private final int selfId;
-    private final Map<Integer, String> members; 
-    // Map<nodeId, address>  (address pode ser "host:port" ou objeto NetworkAddress)
+    private final Map<Integer, String> members;  // Map<nodeId, address>
 
     private final int n;
     private final int f;
@@ -62,11 +60,11 @@ public final class HotStuffConfig {
     // --- Leader rotation (round robin) ---
 
     public int leaderOf(int view) {
-        if (view < 0)
-            throw new IllegalArgumentException("view must be >= 0");
+        if (view < 1)
+            throw new IllegalArgumentException("view must be >= 1");
 
         // Round-robin rotation
-        int index = view % n;
+        int index = (view - 1) % n;
 
         // Assumindo IDs 0..n-1
         return index;

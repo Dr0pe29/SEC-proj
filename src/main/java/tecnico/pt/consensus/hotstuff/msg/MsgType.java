@@ -2,5 +2,6 @@ package tecnico.pt.consensus.hotstuff.msg;
 
 public enum MsgType {
     PROPOSE,
-    VOTE
+    VOTE,
+    QC_FORWARD
 }

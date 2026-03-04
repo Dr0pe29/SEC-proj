@@ -10,7 +10,7 @@ public final class Genesis {
         QC genesisQC = createGenesisQC();
         return new Block(
                 GENESIS_ID,
-                GENESIS_ID,           // sem pai, aponta para si mesmo
+                null,           // sem pai
                 0,              // view 0
                 null,           // sem comando
                 genesisQC

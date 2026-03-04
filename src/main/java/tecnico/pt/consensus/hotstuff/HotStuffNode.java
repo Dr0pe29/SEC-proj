@@ -9,6 +9,7 @@ import tecnico.pt.consensus.hotstuff.model.Vote;
 import tecnico.pt.consensus.hotstuff.msg.HotStuffMessage;
 import tecnico.pt.consensus.hotstuff.msg.ProposeMsg;
 import tecnico.pt.consensus.hotstuff.msg.VoteMsg;
+import tecnico.pt.consensus.hotstuff.msg.QcForwardMsg;
 import tecnico.pt.consensus.hotstuff.service.BlockchainService;
 
 /**
@@ -24,6 +25,8 @@ public final class HotStuffNode {
     private final HotStuffState state;
     private final HotStuffNetwork net;
     private final BlockchainService service;
+
+    private int lastProposedView = -1;
 
     public HotStuffNode(HotStuffConfig config,
                         HotStuffState state,
@@ -43,6 +46,7 @@ public final class HotStuffNode {
         switch (msg.type()) {
             case PROPOSE -> onPropose(srcId, (ProposeMsg) msg);
             case VOTE -> onVote(srcId, (VoteMsg) msg);
+            case QC_FORWARD -> onQcForward(srcId, (QcForwardMsg) msg);
             default -> { /* ignore */ }
         }
     }
@@ -53,9 +57,16 @@ public final class HotStuffNode {
         int v = state.getCurrentView();
         if (!config.isLeader(v)) return;
 
+        if (v == lastProposedView) return;
+        lastProposedView = v;
+
         // Parent is the block referenced by highQC
         QC high = state.getHighQC();
         String parentId = high.getBlockId();
+
+        System.out.println("Node " + config.getSelfId() +
+        " proposing view " + v +
+        " parent=" + parentId);
 
         // Step 3: command can be placeholder (later you integrate client requests)
         String cmd = "cmd@view" + v;
@@ -73,18 +84,36 @@ public final class HotStuffNode {
     private void onPropose(int srcId, ProposeMsg m) {
         int v = m.view();
 
-        // Ignore old/future proposals in Step 3 (keep it simple)
-        if (v != state.getCurrentView()) return;
+        System.out.println("Node " + config.getSelfId() +
+        " received PROPOSE view " + v +
+        " from " + srcId);
 
         // Optional: check leader id matches expected
         if (m.getLeaderId() != config.leaderOf(v)) return;
 
         Block b = m.getBlock();
+        System.out.println("Node " + config.getSelfId() +
+        " received block " + b.toString());
         state.storeBlock(b);
+
+        // DUVIDOSO: Supostamente no hotstuff, o node atualiza o highQC e tenta dar commit sempre que algo muda: QC formado, Block stored
+        if (b.getJustify() != null) {
+            state.updateHighQC(b.getJustify());
+            tryDecideFromQC(state.getHighQC());
+        }
+
+        if (v < state.getCurrentView()) {
+            return;
+        }
+        state.setCurrentView(v);
 
         if (!SafetyRules.safeToVote(state, b)) return;
 
         Vote vote = new Vote(v, b.getId(), config.getSelfId());
+        System.out.println("Node " + config.getSelfId() +
+        " voting for block " + b.getId() +
+        " (view=" + v + ")");
+
         net.send(m.getLeaderId(), new VoteMsg(v, vote));
     }
 
@@ -101,42 +130,74 @@ public final class HotStuffNode {
         state.addVote(v, vote.getBlockId(), vote.getVoterId());
 
         if (state.voteCount(v, vote.getBlockId()) >= config.getQuorumSize()) {
+            System.out.println("Node " + config.getSelfId() +
+                " formed QC for view " + v +
+                " block=" + vote.getBlockId());
             // Form QC
             Set<Integer> voters = state.votersSnapshot(v, vote.getBlockId());
             QC qc = new QC(v, vote.getBlockId(), voters);
 
-            // Update highQC
+            // Try decide (grandparent rule) / meio que funciona sem ele 
             state.updateHighQC(qc);
-
-            // Try decide (grandparent rule)
             tryDecideFromQC(qc);
 
-            // Advance to next view (happy path)
-            state.setCurrentView(v + 1);
-
-            // Next leader may propose (if it's me)
-            proposeIfLeader();
+            int nextView = v + 1;
+            net.broadcast(new QcForwardMsg(nextView, qc));
         }
+    }
+
+    private void onQcForward(int srcId, QcForwardMsg m) {
+        int nextView = m.view();
+
+        System.out.println("Node " + config.getSelfId() + " received QC_FORWARD for view " + nextView + " from " + srcId);
+
+        // ignora mensagens atrasadas
+        if (nextView < state.getCurrentView()) return;
+
+        // alinha view e highQC (o QC foi "forwarded")
+        state.updateHighQC(m.getQc());
+        state.setCurrentView(nextView);
+
+        tryDecideFromQC(m.getQc());
+
     }
 
     /**
      * Decide the grandparent of qc.block if chain length allows.
      */
     private void tryDecideFromQC(QC qc) {
-        Block b3 = state.requireBlock(qc.getBlockId());
-        String b2Id = b3.getParentId();
-        if (b2Id == null) return;
+        Block b3 = state.getBlockOrNull(qc.getBlockId());
+        if (b3 == null){
+            System.out.println("Node " + config.getSelfId() +
+                " cannot find block b3 " + qc.getBlockId() +
+                " for QC at view " + qc.getView());
+            
+            return;
+        }
 
-        Block b2 = state.requireBlock(b2Id);
-        String b1Id = b2.getParentId();
-        if (b1Id == null) return;
+        Block b2 = state.getBlockOrNull(b3.getParentId());
+        if (b2 == null) {
+            System.out.println("Node " + config.getSelfId() +
+                " cannot find block b2 " + b3.getParentId() +
+                " for block b3 " + b3.getId());
+            return;
+        }
 
-        Block b1 = state.requireBlock(b1Id);
+        Block b1 = state.getBlockOrNull(b2.getParentId());
+        if (b1 == null) {
+            System.out.println("Node " + config.getSelfId() +
+                " cannot find block b1 " + b2.getParentId() +
+                " for block b2 " + b2.getId());
+            return;
+        }
 
-        // Avoid deciding the same block twice
         if (b1.getId().equals(state.getLastDecidedBlockId())) return;
 
         state.setLastDecidedBlockId(b1.getId());
+
+        System.out.println("Node " + config.getSelfId() +
+            " DECIDED block " + b1.getId());
+
         service.onDecide(b1);
     }
 }
