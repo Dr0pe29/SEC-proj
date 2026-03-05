@@ -1,17 +1,16 @@
 package tecnico.pt;
 
 import java.io.IOException;
-import java.util.Set;
-import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-
 public class StubbornLink implements PacketListener {
     private final UDPClient client;
     //needs to be CopyOnWriteArraySet for thread safety
-    private final Set<Message> pendingMessages = new CopyOnWriteArraySet<>(); 
+    private final Map<String, PacketPayload> pending = new ConcurrentHashMap<>();
     // Scheduler for retrying messages (better than thread, more robust cause it doesnt fail
     // on exceptions and more efficient cause timeouts are fixed and not based on sleep)
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(); 
@@ -29,24 +28,26 @@ public class StubbornLink implements PacketListener {
         this.listener = higherLayer;
     }
 
-    public void stubbornSend(Message message) {
-        pendingMessages.add(message);
-        
-        try {
-            client.send(message);
-
-        } catch (IOException e) {
-            System.out.println("Failed to send message to " + message.getDestination().getServerAddress() + ":" + message.getDestination().getServerPort());
+    public void stubbornSend(PacketPayload packet) {
+        if (packet.getType() == PacketPayload.Type.DATA) {
+            pending.put(packet.getUniqueId(), packet);
         }
+        sendToUDP(packet);
+    }
+
+    private void sendToUDP(PacketPayload packet) {
+        try {
+            client.send(packet);
+        } catch (IOException ignored) {}
+    }
+
+    public void acknowledge(String packetId) {
+        pending.remove(packetId);
     }
 
     private void resendAll() {
-        for (Message msg : pendingMessages) {
-            try {
-                client.send(msg);
-            } catch (IOException e) {
-                System.out.println("Failed to send message to " + msg.getDestination().getServerAddress() + ":" + msg.getDestination().getServerPort());
-            }
+        for (PacketPayload packet : pending.values()) {
+            sendToUDP(packet);
         }
     }
 
@@ -57,9 +58,6 @@ public class StubbornLink implements PacketListener {
         if (listener != null) {
             listener.onPacketReceived(data, source);
         }
-    }
-    public void removeMessage(NetworkAddress dest, byte[] data) {
-        pendingMessages.remove(new Message(dest, data));
     }
 
     public void shutdown() {

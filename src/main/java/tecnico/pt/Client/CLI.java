@@ -8,27 +8,27 @@ import tecnico.pt.NetworkAddress;
 import tecnico.pt.UDPClient;
 import tecnico.pt.UDPServer;
 import tecnico.pt.MembersList;
-import tecnico.pt.Message;
+import tecnico.pt.PacketPayload;
 import tecnico.pt.StubbornLink;
 
 public class CLI {
     private static final MembersList membersList = new MembersList();
-    private final String memberId;
+    private final Integer memberId;
     private StubbornLink stubbornLink;
     private UDPServer server;
     private UDPClient udpClient;
 
-    public CLI(String memberId) {
+    public CLI(Integer memberId) {
         this.memberId = memberId;
     }
-    
-    public String getMemberId() {
+
+    public Integer getMemberId() {
         return this.memberId;
     }
 
     public void memberSetup() throws SocketException, UnknownHostException {
         // Initialize the UDP client and server for this member
-        NetworkAddress memberAddress = MembersList.MEMBERS.get(getMemberId());
+        NetworkAddress memberAddress = membersList.getMemberAddress(this.memberId);
         System.out.println("Initializing member " + getMemberId() + " with address " + memberAddress.getServerAddress() + ":" + memberAddress.getServerPort());
         //CLIENT
         this.udpClient = new UDPClient();
@@ -55,7 +55,7 @@ public class CLI {
                 }
                 default -> {
                     System.out.println("You entered: " + input);
-                    Message msg = new Message(new NetworkAddress("localhost", 12346), input.getBytes());
+                    PacketPayload msg = new PacketPayload(this.memberId, System.currentTimeMillis(), PacketPayload.Type.DATA, input.getBytes());
                     this.stubbornLink.stubbornSend(msg); // Example address and port
                 }
             }
