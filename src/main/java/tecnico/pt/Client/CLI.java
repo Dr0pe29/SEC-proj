@@ -2,19 +2,26 @@ package tecnico.pt.Client;
 import java.io.IOException;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.security.Key;
+import java.security.Signature;
+import java.util.Map;
 import java.util.Scanner;
 
-import tecnico.pt.NetworkAddress;
+import tecnico.pt.AuthenticatedPerfectLink;
+import tecnico.pt.MemberInfo;
 import tecnico.pt.UDPClient;
 import tecnico.pt.UDPServer;
 import tecnico.pt.MembersList;
 import tecnico.pt.PacketPayload;
 import tecnico.pt.StubbornLink;
+import tecnico.pt.crypto.AuthenticatedSignature;
+import tecnico.pt.crypto.KeyManager;;
 
 public class CLI {
     private static final MembersList membersList = new MembersList();
     private final Integer memberId;
     private StubbornLink stubbornLink;
+    private AuthenticatedPerfectLink perfectLink;
     private UDPServer server;
     private UDPClient udpClient;
 
@@ -27,16 +34,30 @@ public class CLI {
     }
 
     public void memberSetup() throws SocketException, UnknownHostException {
-        // Initialize the UDP client and server for this member
-        NetworkAddress memberAddress = membersList.getMemberAddress(this.memberId);
-        System.out.println("Initializing member " + getMemberId() + " with address " + memberAddress.getServerAddress() + ":" + memberAddress.getServerPort());
-        //CLIENT
-        this.udpClient = new UDPClient();
-        this.stubbornLink = new StubbornLink(this.udpClient);
+        // Initialize keys
+        AuthenticatedSignature crypto = new AuthenticatedSignature();
+        crypto.loadPrivateKey(this.memberId); // Load own private key from file
 
-        //SERVER
+        // Load all other members' public keys from MembersList
+        for (Map.Entry<Integer, MemberInfo> entry : membersList.getAllMembers().entrySet()) {
+            byte[] pubKeyBytes = entry.getValue().getPublicKey();
+            if (pubKeyBytes.length > 0) {
+                crypto.addPublicKey(entry.getKey(), pubKeyBytes);
+            }
+        }
+
+        //Client
+        MemberInfo memberAddress = membersList.getMemberInfo(this.memberId);
+        System.out.println("Initializing member " + getMemberId() + " with address " + memberAddress.getServerAddress() + ":" + memberAddress.getServerPort());
+
+        this.udpClient = new UDPClient(membersList);
+        this.stubbornLink = new StubbornLink(this.udpClient);
+        this.perfectLink = new AuthenticatedPerfectLink(this.memberId, this.stubbornLink, crypto);
+        this.stubbornLink.setHigherLayer(this.perfectLink);
+
+        //Server
         this.server = new UDPServer(memberAddress.getServerAddress(), memberAddress.getServerPort(), this.stubbornLink);
-        this.server.start(); // Start the server thread
+        this.server.start();
     }
 
     public void readInput() throws IOException {
@@ -53,10 +74,23 @@ public class CLI {
                     scanner.close();
                     return;
                 }
+
+                case "keys" -> {
+                    System.out.println("Generating new RSA key pair...");
+                    for (Integer id : membersList.getAllMembers().keySet()) {
+                        KeyManager.generateKeys(id);
+                    }
+                }
                 default -> {
                     System.out.println("You entered: " + input);
-                    PacketPayload msg = new PacketPayload(this.memberId, System.currentTimeMillis(), PacketPayload.Type.DATA, input.getBytes());
-                    this.stubbornLink.stubbornSend(msg); // Example address and port
+                    PacketPayload msg = new PacketPayload(
+                        this.memberId, 
+                        1, //Placeholder, we will change later to the actual destination (maybe broadcast or round robin)   
+                        System.currentTimeMillis(), 
+                        PacketPayload.Type.DATA,
+                        input
+                    );
+                    this.perfectLink.send(msg); 
                 }
             }
         }

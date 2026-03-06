@@ -1,18 +1,16 @@
 package tecnico.pt;
-import java.io.Serializable;
-import java.util.Arrays;
 
-public class PacketPayload implements Serializable {
+public class PacketPayload {
     public enum Type { DATA, ACK }
 
     private final int senderId;
     private final int destinationId;
     private final long sequenceNumber;
     private final Type type;
-    private final byte[] payload;
-    private final byte[] signature;
+    private final String payload;
+    private byte[] signature;
 
-    public PacketPayload(int senderId, int destinationId, long sequenceNumber, Type type, byte[] payload) {
+    public PacketPayload(int senderId, int destinationId, long sequenceNumber, Type type, String payload) {
         this.senderId = senderId;
         this.destinationId = destinationId;
         this.sequenceNumber = sequenceNumber;
@@ -21,13 +19,13 @@ public class PacketPayload implements Serializable {
         this.signature = null;
     }
 
-    public PacketPayload(int senderId, int destinationId, long sequenceNumber, Type type, byte[] payload, byte[] signature) {
+    public PacketPayload(int senderId, int destinationId, long sequenceNumber, Type type, String payload, byte[] signature) {
         this.senderId = senderId;
         this.destinationId = destinationId;
         this.sequenceNumber = sequenceNumber;
         this.type = type;
         this.payload = payload;
-        this.signature = Arrays.copyOf(signature, signature.length);
+        this.signature = signature;
     }
 
     // Unique ID used by StubbornLink to identify which message to stop resending
@@ -39,6 +37,9 @@ public class PacketPayload implements Serializable {
     public int getDestinationId()   { return destinationId; }
     public long getSequenceNumber() { return sequenceNumber; }
     public Type getType()           { return type; }
-    public byte[] getPayload()      { return payload; }
+    public String getPayload()      { return payload; }
     public byte[] getSignature()    { return signature; }
+    public void setSignature(byte[] signature) {
+        this.signature = signature;
+    }
 }

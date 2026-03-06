@@ -30,13 +30,10 @@ public class UDPServer extends Thread {
                 byte[] receivedData = new byte[packet.getLength()];
                 System.arraycopy(packet.getData(), 0, receivedData, 0, packet.getLength());
 
-                NetworkAddress source = new NetworkAddress(
-                    packet.getAddress().getHostAddress(), 
-                    packet.getPort()
-                );
+                PacketPayload payload = Serializer.deserialise(receivedData);
 
                 // Pass the raw bytes up to the next layer
-                listener.onPacketReceived(receivedData, source);
+                listener.onPacketReceived(payload);
 
             } catch (IOException e) {
                 if (running) {
