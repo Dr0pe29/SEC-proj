@@ -19,7 +19,10 @@ import tecnico.pt.crypto.KeyManager;;
 
 public class CLI {
     private static final MembersList membersList = new MembersList();
+
     private final Integer memberId;
+    private long requestSeq = 0;
+
     private StubbornLink stubbornLink;
     private AuthenticatedPerfectLink perfectLink;
     private UDPServer server;
@@ -82,15 +85,22 @@ public class CLI {
                     }
                 }
                 default -> {
-                    System.out.println("You entered: " + input);
-                    PacketPayload msg = new PacketPayload(
-                        this.memberId, 
-                        1, //Placeholder, we will change later to the actual destination (maybe broadcast or round robin)   
-                        System.currentTimeMillis(), 
-                        PacketPayload.Type.DATA,
-                        input
-                    );
-                    this.perfectLink.send(msg); 
+                    long seq = ++requestSeq;
+                    String payload = "CLIENT_APPEND|" + this.memberId + "|" + seq + "|" + input;
+
+                    System.out.println("Broadcasting append request: " + input);
+
+                    for (int destId : new int[]{1, 2, 3, 4}) {
+                        PacketPayload msg = new PacketPayload(
+                            this.memberId,
+                            destId,
+                            System.currentTimeMillis(),
+                            PacketPayload.Type.DATA,
+                            payload
+                        );
+
+                        this.perfectLink.send(msg);
+                    }
                 }
             }
         }

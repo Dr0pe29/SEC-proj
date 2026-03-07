@@ -12,6 +12,7 @@ public final class Genesis {
                 GENESIS_ID,
                 null,           // sem pai
                 0,              // view 0
+                null,          // sem requestId
                 null,           // sem comando
                 genesisQC
         );

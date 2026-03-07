@@ -64,9 +64,9 @@ public final class HotStuffConfig {
             throw new IllegalArgumentException("view must be >= 1");
 
         // Round-robin rotation
-        int index = (view - 1) % n;
+        int index = ((view - 1) % n) + 1;
 
-        // Assumindo IDs 0..n-1
+        // Assumindo IDs 1..n
         return index;
     }
 

@@ -1,0 +1,8 @@
+Client: 
+    mvn exec:java -Dexec.mainClass=tecnico.pt.App -Dexec.args="0"
+
+Replicas:
+    mvn exec:java -Dexec.mainClass=tecnico.pt.consensus.hotstuff.HotStuffMain -Dexec.args="1"
+    mvn exec:java -Dexec.mainClass=tecnico.pt.consensus.hotstuff.HotStuffMain -Dexec.args="2"
+    mvn exec:java -Dexec.mainClass=tecnico.pt.consensus.hotstuff.HotStuffMain -Dexec.args="3"
+    mvn exec:java -Dexec.mainClass=tecnico.pt.consensus.hotstuff.HotStuffMain -Dexec.args="4"

@@ -1,6 +1,9 @@
 package tecnico.pt.consensus.hotstuff;
 
 import java.util.Set;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import tecnico.pt.consensus.hotstuff.model.Block;
 import tecnico.pt.consensus.hotstuff.model.Ids;
@@ -14,7 +17,7 @@ import tecnico.pt.consensus.hotstuff.service.BlockchainService;
 
 /**
  * Stage 1 / Step 3 HotStuff "happy path":
- * - leader rotation via view % n
+ * - leader rotation per view
  * - build QC from votes
  * - update highQC
  * - decide grandparent when forming QC for grandchild
@@ -28,6 +31,10 @@ public final class HotStuffNode {
 
     private int lastProposedView = -1;
 
+    private final Queue<ClientRequest> pendingCommands = new ConcurrentLinkedQueue<>();
+    private final Set<String> pendingIds = ConcurrentHashMap.newKeySet();
+    private final Set<String> committedIds = ConcurrentHashMap.newKeySet();
+
     public HotStuffNode(HotStuffConfig config,
                         HotStuffState state,
                         HotStuffNetwork net,
@@ -39,6 +46,20 @@ public final class HotStuffNode {
     }
 
     public void start() {
+        proposeIfLeader();
+    }
+
+    public void submitCommand(ClientRequest request) {
+        if (request == null) return;
+        if (request.command() == null || request.command().isBlank()) return;
+
+        // already decided
+        if (committedIds.contains(request.requestId())) return;
+
+        // already pending locally
+        if (!pendingIds.add(request.requestId())) return;
+
+        pendingCommands.offer(request);
         proposeIfLeader();
     }
 
@@ -58,23 +79,39 @@ public final class HotStuffNode {
         if (!config.isLeader(v)) return;
 
         if (v == lastProposedView) return;
-        lastProposedView = v;
 
         // Parent is the block referenced by highQC
         QC high = state.getHighQC();
         String parentId = high.getBlockId();
 
-        System.out.println("Node " + config.getSelfId() +
-        " proposing view " + v +
-        " parent=" + parentId);
 
-        // Step 3: command can be placeholder (later you integrate client requests)
-        String cmd = "cmd@view" + v;
+        ClientRequest req = pendingCommands.poll();
+        if (req == null) {
+            return; // nada para propor nesta view
+        }
+
+        String cmd = req.command();
+        String requestId = req.requestId();
+
+        // remove from local pending set because it is now being proposed
+        pendingIds.remove(requestId);
+
+        lastProposedView = v;
+
+        System.out.println("Node " + config.getSelfId() +
+            " proposing view " + v +
+            " parent=" + parentId +
+            "requestId=" + requestId +
+            " cmd=" + cmd +  "\n");
 
         String id = Ids.blockId(parentId, v, cmd);
-        Block b = new Block(id, parentId, v, cmd, high);
+        Block b = new Block(id, parentId, v, requestId, cmd, high);
 
         state.storeBlock(b);
+
+        System.out.println("Node " + config.getSelfId() +
+        " PROPOSING view " + v +
+        " parent=" + parentId);
 
         net.broadcast(new ProposeMsg(v, config.getSelfId(), b));
     }
@@ -88,7 +125,6 @@ public final class HotStuffNode {
         " received PROPOSE view " + v +
         " from " + srcId);
 
-        // Optional: check leader id matches expected
         if (m.getLeaderId() != config.leaderOf(v)) return;
 
         Block b = m.getBlock();
@@ -96,10 +132,14 @@ public final class HotStuffNode {
         " received block " + b.toString());
         state.storeBlock(b);
 
-        // DUVIDOSO: Supostamente no hotstuff, o node atualiza o highQC e tenta dar commit sempre que algo muda: QC formado, Block stored
+        // if this request was pending locally, remove it now
+        if (b.getRequestId() != null) {
+            pendingIds.remove(b.getRequestId());
+            removePendingRequestById(b.getRequestId());
+        }
+
         if (b.getJustify() != null) {
             state.updateHighQC(b.getJustify());
-            tryDecideFromQC(state.getHighQC());
         }
 
         if (v < state.getCurrentView()) {
@@ -137,9 +177,9 @@ public final class HotStuffNode {
             Set<Integer> voters = state.votersSnapshot(v, vote.getBlockId());
             QC qc = new QC(v, vote.getBlockId(), voters);
 
-            // Try decide (grandparent rule) / meio que funciona sem ele 
             state.updateHighQC(qc);
-            tryDecideFromQC(qc);
+
+            decideBlock(vote.getBlockId());
 
             int nextView = v + 1;
             net.broadcast(new QcForwardMsg(nextView, qc));
@@ -158,46 +198,26 @@ public final class HotStuffNode {
         state.updateHighQC(m.getQc());
         state.setCurrentView(nextView);
 
-        tryDecideFromQC(m.getQc());
+        decideBlock(m.getQc().getBlockId());
+
+        proposeIfLeader();
 
     }
 
-    /**
-     * Decide the grandparent of qc.block if chain length allows.
-     */
-    private void tryDecideFromQC(QC qc) {
-        Block b3 = state.getBlockOrNull(qc.getBlockId());
-        if (b3 == null){
-            System.out.println("Node " + config.getSelfId() +
-                " cannot find block b3 " + qc.getBlockId() +
-                " for QC at view " + qc.getView());
-            
-            return;
-        }
+    private void decideBlock(String blockId) {
+        Block decided = state.getBlockOrNull(blockId);
+        if (decided == null) return;
 
-        Block b2 = state.getBlockOrNull(b3.getParentId());
-        if (b2 == null) {
-            System.out.println("Node " + config.getSelfId() +
-                " cannot find block b2 " + b3.getParentId() +
-                " for block b3 " + b3.getId());
-            return;
-        }
+        if (decided.getId().equals(state.getLastDecidedBlockId())) return;
 
-        Block b1 = state.getBlockOrNull(b2.getParentId());
-        if (b1 == null) {
-            System.out.println("Node " + config.getSelfId() +
-                " cannot find block b1 " + b2.getParentId() +
-                " for block b2 " + b2.getId());
-            return;
-        }
+        state.setLastDecidedBlockId(decided.getId());
 
-        if (b1.getId().equals(state.getLastDecidedBlockId())) return;
+        System.out.println("Node " + config.getSelfId() + " DECIDED command: " + decided.getCommand());
 
-        state.setLastDecidedBlockId(b1.getId());
+        service.onDecide(decided);
+    }
 
-        System.out.println("Node " + config.getSelfId() +
-            " DECIDED block " + b1.getId());
-
-        service.onDecide(b1);
+    private void removePendingRequestById(String requestId) {
+        pendingCommands.removeIf(req -> req.requestId().equals(requestId));
     }
 }
