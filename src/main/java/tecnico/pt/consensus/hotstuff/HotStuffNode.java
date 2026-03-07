@@ -191,15 +191,11 @@ public final class HotStuffNode {
 
         System.out.println("Node " + config.getSelfId() + " received QC_FORWARD for view " + nextView + " from " + srcId);
 
-        // ignora mensagens atrasadas
         if (nextView < state.getCurrentView()) return;
 
-        // alinha view e highQC (o QC foi "forwarded")
         state.updateHighQC(m.getQc());
-        state.setCurrentView(nextView);
-
         decideBlock(m.getQc().getBlockId());
-
+        state.setCurrentView(nextView);
         proposeIfLeader();
 
     }
@@ -215,6 +211,8 @@ public final class HotStuffNode {
         System.out.println("Node " + config.getSelfId() + " DECIDED command: " + decided.getCommand());
 
         service.onDecide(decided);
+
+        System.out.println("Node " + config.getSelfId() + " decided log = " + service.snapshot());
     }
 
     private void removePendingRequestById(String requestId) {
